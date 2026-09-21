@@ -1,0 +1,10 @@
+{
+  "name": "cartoon-pizza-web",
+  "version": "1.0.0",
+  "description": "Front-end (HTML, CSS y JS) del sistema de gestión de Cartoon Pizza: mesas, cocina y caja",
+  "private": true,
+  "scripts": {
+    "dev": "npx --yes serve -l 5500 ."
+  },
+  "license": "MIT"
+}

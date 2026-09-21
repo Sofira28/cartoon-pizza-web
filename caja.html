@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartoon Pizza - Módulo de Caja</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.3/dist/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom chess-pattern">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="#">
+                <i class="bi bi-stars me-2"></i>
+                <img src="assets/images/LogoPizza.png" class="logo-img" alt="Cartoon Pizza">
+            </a>
+            <div class="d-flex">
+                <span class="navbar-text me-3">
+                    <i class="bi bi-person-circle me-1"></i>Cajero: <span id="nombreUsuario">Cargando...</span>
+                </span>
+                <button class="btn btn-danger" onclick="cerrarSesion()">
+                    <i class="bi bi-box-arrow-right me-1"></i>Cerrar Sesión
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Panel lateral -->
+            <div class="col-md-3 col-lg-2 sidebar p-0">
+                <div class="sidebar-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#dashboard" data-section="dashboard">
+                                <i class="bi bi-speedometer2 me-2"></i>Panel Principal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#billing" data-section="billing">
+                                <i class="bi bi-receipt me-2"></i>Facturación
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#tables" data-section="tables">
+                                <i class="bi bi-table me-2"></i>Mesas
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#reports" data-section="reports">
+                                <i class="bi bi-bar-chart me-2"></i>Reportes
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            
+            <div class="col-md-9 col-lg-10 main-content">
+                
+                <div id="dashboard-section" class="content-section active">
+                    <h2 class="mb-4" style="font-family: 'Bangers', cursive; color: var(--color-red);">
+                        <i class="bi bi-speedometer2 me-2"></i>Panel Principal
+                    </h2>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-3 mb-3">
+                            <div class="dashboard-card text-white" style="background-color: var(--color-red);">
+                                <div class="card-body">
+                                    <div class="stat-value" id="ventasTotales">$0</div>
+                                    <div class="stat-label">Ventas de Hoy</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="dashboard-card text-white" style="background-color: #06d6a0;">
+                                <div class="card-body">
+                                    <div class="stat-value" id="mesasOcupadas">0/10</div>
+                                    <div class="stat-label">Mesas Ocupadas</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="dashboard-card text-white" style="background-color: #06d6a0;">
+                                <div class="card-body">
+                                    <div class="stat-value" id="pedidosPendientes">0</div>
+                                    <div class="stat-label">Pedidos Pendientes</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="dashboard-card text-white" style="background-color: #118ab2;">
+                                <div class="card-body">
+                                    <div class="stat-value" id="pedidosCompletados">0</div>
+                                    <div class="stat-label">Pedidos Completados</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card cartoon-shadow">
+                        <div class="card-header back titulo-chess d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-clock-history me-2"></i>Pedidos Recientes</span>
+                            <button class="btn btn-sm btn-light" onclick="cargarPedidos()">Actualizar</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th># Pedido</th>
+                                        <th>Mesa</th>
+                                        <th>Mesero</th>
+                                        <th>Total</th>
+                                        <th>Estado</th>
+                                        <th>Hora</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaPedidosRecientes">
+                                    
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Facturacion -->
+                <div id="billing-section" class="content-section">
+                    <h2 class="mb-4" style="font-family: 'Bangers', cursive; color: var(--color-red);">
+                        <i class="bi bi-receipt me-2"></i>Facturación
+                    </h2>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card cartoon-shadow mb-4">
+                                <div class="card-header back titulo-chess">
+                                    <i class="bi bi-receipt me-2"></i>Facturación por Mesa
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text" style="border: 2px solid var(--color-black);">Mesa</span>
+                                                <select class="form-select" id="selectorMesa" style="border: 2px solid var(--color-black);">
+                                                    <option value="">Seleccionar mesa...</option>
+                                                   
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="input-group">
+                                                <span class="input-group-text" style="border: 2px solid var(--color-black);">Nº Pedido</span>
+                                                <input type="text" class="form-control" id="buscarPedido" placeholder="Buscar por número de pedido" style="border: 2px solid var(--color-black);">
+                                                <button class="btn btn-cash btn-process" onclick="buscarPedido()">Buscar</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Mesa</th>
+                                                    <th>Pedido</th>
+                                                    <th>Mesero</th>
+                                                    <th>Total</th>
+                                                    <th>Estado</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="tablaPedidosFacturacion">
+                                                
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="cash-stats mb-4">
+                                <h5 class="mb-3" style="font-family: 'Bangers', cursive; color: var(--color-red);">
+                                    <i class="bi bi-cash-stack me-2"></i>Resumen de Caja
+                                </h5>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Ventas del día:</span>
+                                    <strong id="ventasDiarias">$0</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Efectivo:</span>
+                                    <strong id="ventasEfectivo">$0</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Tarjeta:</span>
+                                    <strong id="ventasTarjeta">$0</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Transferencias:</span>
+                                    <strong id="ventasTransferencia">$0</strong>
+                                </div>
+                                <hr>
+                                <div class="d-flex justify-content-between mb-3">
+                                    <span>Total facturado:</span>
+                                    <strong class="total-amount" id="totalFacturado">$0</strong>
+                                </div>
+                                <div class="d-grid">
+                                    <button class="btn btn-outline-cash btn-cash" onclick="generarCorteCaja()">Corte de Caja</button>
+                                </div>
+                            </div>
+                            
+                            <div class="cash-stats">
+                                <h5 class="mb-3" style="font-family: 'Bangers', cursive; color: var(--color-red);">
+                                    <i class="bi bi-activity me-2"></i>Estadísticas Rápidas
+                                </h5>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Facturas hoy:</span>
+                                    <strong id="facturasHoy">0</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Ticket promedio:</span>
+                                    <strong id="ticketPromedio">$0</strong>
+                                </div>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Pedidos pendientes:</span>
+                                    <strong id="pendientesFacturacion">0</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mesitas -->
+                <div id="tables-section" class="content-section">
+                    <h2 class="mb-4" style="font-family: 'Bangers', cursive; color: var(--color-red);">
+                        <i class="bi bi-table me-2"></i>Estado de Mesas
+                    </h2>
+                    <div class="row" id="contenedorMesas">
+                        
+                    </div>
+                </div>
+
+               
+                <div id="reports-section" class="content-section">
+                    <h2 class="mb-4" style="font-family: 'Bangers', cursive; color: var(--color-red);">
+                        <i class="bi bi-bar-chart me-2"></i>Reportes
+                    </h2>
+                    <div class="card cartoon-shadow">
+                        <div class="card-header back titulo-chess">
+                            <i class="bi bi-graph-up me-2"></i>Reporte de Ventas
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label">Fecha inicial</label>
+                                    <input type="date" class="form-control" id="fechaInicio" style="border: 2px solid var(--color-black);">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Fecha final</label>
+                                    <input type="date" class="form-control" id="fechaFin" style="border: 2px solid var(--color-black);">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">&nbsp;</label>
+                                    <button class="btn btn-cash btn-process w-100" onclick="generarReporteVentas()">Generar Reporte</button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Fecha</th>
+                                            <th>Total Ventas</th>
+                                            <th>Nº Facturas</th>
+                                            <th>Ticket Promedio</th>
+                                            <th>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tablaReporteVentas">
+                                       
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ventana de facturacion -->
+    <div class="modal fade" id="modalFacturacion" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content" style="border: 3px solid var(--color-black); border-radius: 15px;">
+                <div class="modal-header chess-pattern text-white">
+                    <h5 class="modal-title" style="font-family: 'Bangers', cursive; font-size: 1.5rem;">
+                        Facturación - Mesa <span id="numeroMesaModal"></span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6 style="font-family: 'Bangers', cursive; color: var(--color-red);">Detalles del Pedido</h6>
+                            <p class="mb-1"><strong>Nº Pedido:</strong> <span id="idPedidoModal"></span></p>
+                            <p class="mb-1"><strong>Mesero:</strong> <span id="meseroModal"></span></p>
+                            <p class="mb-1"><strong>Hora:</strong> <span id="horaModal"></span></p>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <h6 style="font-family: 'Bangers', cursive; color: var(--color-red);">Cartoon Pizza</h6>
+                            <p class="mb-1">Calle Principal #123</p>
+                            <p class="mb-1">Tel: (123) 456-7890</p>
+                            <p class="mb-1">NIT: 123-456789-001-2</p>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive mb-4">
+                        <table class="table table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Producto</th>
+                                    <th class="text-center">Cantidad</th>
+                                    <th class="text-end">Precio Unitario</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaItemsModal">
+                               
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" class="text-end"><strong>Subtotal:</strong></td>
+                                    <td class="text-end" id="subtotalModal">$0</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="3" class="text-end"><strong>Impuestos (10%):</strong></td>
+                                    <td class="text-end" id="impuestosModal">$0</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="3" class="text-end"><strong>Total:</strong></td>
+                                    <td class="text-end"><strong class="total-amount" id="totalModal">$0</strong></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6 style="font-family: 'Bangers', cursive; color: var(--color-red);">Método de Pago</h6>
+                            <div class="payment-method selected" data-method="cash">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="metodoPago" id="metodoEfectivo" value="cash" checked>
+                                    <label class="form-check-label" for="metodoEfectivo">
+                                        <i class="bi bi-cash-coin me-2"></i>Efectivo
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="payment-method" data-method="card">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="metodoPago" id="metodoTarjeta" value="card">
+                                    <label class="form-check-label" for="metodoTarjeta">
+                                        <i class="bi bi-credit-card me-2"></i>Tarjeta
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="payment-method" data-method="transfer">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="metodoPago" id="metodoTransferencia" value="transfer">
+                                    <label class="form-check-label" for="metodoTransferencia">
+                                        <i class="bi bi-bank me-2"></i>Transferencia
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div id="pagoEfectivo">
+                                <div class="mb-3">
+                                    <label for="montoRecibido" class="form-label fw-bold">Monto Recibido</label>
+                                    <input type="number" class="form-control cash-input" id="montoRecibido" value="0">
+                                </div>
+                                <div class="change-display" id="displayCambio">
+                                    <strong>Cambio:</strong> $0
+                                </div>
+                            </div>
+                            
+                            <div id="pagoTarjeta" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="numeroTarjeta" class="form-label fw-bold">Número de Tarjeta</label>
+                                    <input type="text" class="form-control" id="numeroTarjeta" placeholder="**** **** **** ****" style="border: 2px solid var(--color-black);">
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="vencimientoTarjeta" class="form-label fw-bold">Fecha de Expiración</label>
+                                        <input type="text" class="form-control" id="vencimientoTarjeta" placeholder="MM/AA" style="border: 2px solid var(--color-black);">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="cvcTarjeta" class="form-label fw-bold">CVC</label>
+                                        <input type="text" class="form-control" id="cvcTarjeta" placeholder="***" style="border: 2px solid var(--color-black);">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="pagoTransferencia" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="numeroReferencia" class="form-label fw-bold">Número de Referencia</label>
+                                    <input type="text" class="form-control" id="numeroReferencia" style="border: 2px solid var(--color-black);">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-cash btn-complete" onclick="imprimirFactura()">
+                        <i class="bi bi-receipt me-1"></i>Imprimir Factura
+                    </button>
+                    <button type="button" class="btn btn-cash btn-process" onclick="procesarPago()">
+                        <i class="bi bi-credit-card me-1"></i>Procesar Pago
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/api.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="assets/js/caja.js"></script>
+</body>
+</html>

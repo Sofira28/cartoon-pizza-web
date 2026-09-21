@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartoon Pizza - Sistema de Mesas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.8.3/dist/socket.io.min.js"></script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-custom chess-pattern" >
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="#">
+                <i class="bi bi-stars me-2"></i>
+                 <img src="assets/images/LogoPizza.png" class="logo-img" alt="Cartoon Pizza">
+            </a>
+            <div class="d-flex">
+                <span class="navbar-text me-3">
+                    <i class="bi bi-person-circle me-1"></i>Mesero: <span id="nombreUsuario">Cargando...</span>
+                </span>
+                <button class="btn btn-danger" onclick="cerrarSesion()">
+                    <i class="bi bi-box-arrow-right me-1"></i>Cerrar Sesión
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Panel de mesas y pedido actual -->
+            <div class="col-md-3">
+                <div class="card cartoon-shadow">
+                    <div class="card-header back titulo-chess">
+                        <i class="bi bi-table me-1"></i>Mesas
+                    </div>
+                    <div class="card-body" id="contenedorMesas">
+                       
+                    </div>
+                </div>
+                
+                <div class="card cartoon-shadow mt-3">
+                    <div class="card-header titulo-chess back d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-list-check me-1"></i>Pedido Actual</span>
+                        <span class="badge bg-light text-dark" id="badgeMesaActual">Mesa: -</span>
+                    </div>
+                    <div class="card-body">
+                        <div id="pedidosActuales">
+                            <p class="text-center text-muted">Selecciona una mesa</p>
+                        </div>
+                        <hr>
+                        <div class="d-flex justify-content-between fw-bold fs-5">
+                            <span>Total:</span>
+                            <span class="text-success order-total" id="totalPedido">$0.00</span>
+                        </div>
+                        <div class="order-controls mt-3">
+                            <div class="mb-3">
+                                <label for="notasPedido" class="form-label">Observaciones:</label>
+                                <textarea class="form-control" id="notasPedido" rows="2" placeholder="Agregar notas especiales para la cocina..."></textarea>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-danger" onclick="cancelarPedido()">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar Pedido
+                                </button>
+                                <button class="btn btn-success" onclick="mostrarConfirmacionEnvio()">
+                                    <i class="bi bi-check-circle me-1"></i>Enviar a Cocina
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Panel de categorías y productos -->
+            <div class="col-md-9">
+                <div class="card cartoon-shadow">
+                    <div class="card-header titulo-chess back ">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <i class="bi bi-menu-button-wide me-1"></i>Menú
+                            </div>
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" placeholder="Buscar producto..." id="buscarProducto">
+                                    <button class="btn btn-light" type="button" id="botonBuscar">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Categorías -->
+                        <div class="d-flex flex-wrap mb-4" id="contenedorCategorias">
+                            
+                        </div>
+                        
+                        <!-- Productos -->
+                        <div class="menu-container" id="contenedorProductos">
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- ventana pa personalizar producto -->
+<div class="modal fade" id="modalPersonalizar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border: 3px solid var(--color-black); border-radius: 15px;">
+            <div class="modal-header chess-pattern">
+                <h5 class="modal-title">Personalizar Producto</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <h6 id="nombreProductoModal" style="color: var(--color-red); font-weight: bold; font-family: 'Bangers', cursive;"></h6>
+                <p class="text-muted">Precio: <span id="precioProductoModal" class="fw-bold text-success"></span></p>
+                
+                <!-- Observaciones predefinidas -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Observaciones Rápidas:</label>
+                    <div class="observaciones-grid">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Sin pan" id="obsSinPan">
+                            <label class="form-check-label" for="obsSinPan">
+                                Sin pan
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Sin cebolla" id="obsSinCebolla">
+                            <label class="form-check-label" for="obsSinCebolla">
+                                Sin cebolla
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Sin vegetales" id="obsSinVegetales">
+                            <label class="form-check-label" for="obsSinVegetales">
+                                Sin vegetales
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Sin salsa" id="obsSinSalsa">
+                            <label class="form-check-label" for="obsSinSalsa">
+                                Sin salsa
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Extra queso" id="obsExtraQueso">
+                            <label class="form-check-label" for="obsExtraQueso">
+                                Extra queso
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Poco picante" id="obsPocoPicante">
+                            <label class="form-check-label" for="obsPocoPicante">
+                                Poco picante
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Bien cocido" id="obsBienCocido">
+                            <label class="form-check-label" for="obsBienCocido">
+                                Bien cocido
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="Poco cocido" id="obsPocoCocido">
+                            <label class="form-check-label" for="obsPocoCocido">
+                                Poco cocido
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Observaciones personalizadas -->
+                <div class="mb-3">
+                    <label for="notasProducto" class="form-label fw-bold">Observaciones Especiales:</label>
+                    <textarea class="form-control" id="notasProducto" rows="2" placeholder="Ej: Sin piña, extra queso, sin sal..."></textarea>
+                </div>
+                
+                <!-- Selector de cantidad mejorado -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Cantidad:</label>
+                    <div class="cantidad-selector d-flex align-items-center justify-content-center">
+                        <button type="button" class="btn btn-outline-danger btn-cantidad" onclick="cambiarCantidad(-1)">
+                            <i class="bi bi-dash-lg"></i>
+                        </button>
+                        <span class="cantidad-display mx-3 fw-bold fs-4" id="displayCantidad">1</span>
+                        <button type="button" class="btn btn-outline-success btn-cantidad" onclick="cambiarCantidad(1)">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                    <input type="hidden" id="cantidadProducto" value="1">
+                </div>
+
+                <!-- Resumen del pedido -->
+                <div class="resumen-pedido p-3" style="background-color: #f8f9fa; border: 2px dashed var(--color-orange); border-radius: 10px;">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold">Subtotal:</span>
+                        <span class="fw-bold text-success" id="subtotalProducto">$0.00</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                </button>
+                <button type="button" class="btn btn-primary" id="confirmarAgregar" style="background-color: var(--color-orange); border-color: var(--color-black);">
+                    <i class="bi bi-cart-plus me-1"></i>Agregar al Pedido
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación para enviar a cocina -->
+<div class="modal fade" id="modalConfirmarEnvio" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content" style="border: 3px solid var(--color-black); border-radius: 15px;">
+            <div class="modal-header chess-pattern">
+                <h5 class="modal-title">Confirmar Envío a Cocina</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <i class="bi bi-question-circle text-warning" style="font-size: 3rem;"></i>
+                <h6 class="mt-3" style="color: var(--color-red); font-family: 'Bangers', cursive;">¿Estás seguro de enviar este pedido a cocina?</h6>
+                <p class="text-muted">Mesa: <span id="mesaConfirmacion" class="fw-bold"></span></p>
+                <p class="text-muted">Total: <span id="totalConfirmacion" class="fw-bold text-success"></span></p>
+                <div class="alert alert-warning mt-3">
+                    <small><i class="bi bi-exclamation-triangle me-1"></i>Una vez enviado, no podrás modificar el pedido</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-arrow-left me-1"></i>Revisar Pedido
+                </button>
+                <button type="button" class="btn btn-success" onclick="confirmarEnvioACocina()">
+                    <i class="bi bi-check-circle me-1"></i>¡Sí, Enviar a Cocina!
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/api.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="assets/js/mesas.js"></script>
+</body>
+</html>
