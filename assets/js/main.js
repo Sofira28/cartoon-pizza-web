@@ -23,7 +23,8 @@ function urlImagen(imagen) {
     const valor = String(imagen || '');
     if (valor.startsWith('/api/images/')) return `${APP_CONFIG.API_URL}${valor}`;
     const archivo = valor.split('/').pop();
-    return archivo ? `assets/images/${archivo}` : 'assets/images/LogoPizza.png';
+    // "default-product.png" era la imagen por defecto del sistema anterior y ya no existe
+    return archivo && archivo !== 'default-product.png' ? `assets/images/${archivo}` : 'assets/images/LogoPizza.png';
 }
 
 // Función para formatear números como pesos colombianos

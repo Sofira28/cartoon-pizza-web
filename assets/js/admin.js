@@ -509,7 +509,10 @@ async function guardarProducto(evento) {
 
     await conBotonOcupado('guardarProducto', async () => {
         try {
-            datos.image = await resolverImagenProducto();
+            // Al editar solo se envía la imagen si cambió: así un producto con imagen en formato antiguo
+            // ("/images/pizza.jpg") se puede editar sin tocarla
+            const imagen = await resolverImagenProducto();
+            if (!productoEditando || imagen !== (productoEditando.image || '')) datos.image = imagen;
             if (productoEditando) {
                 await Api.put(`/products/${productoEditando._id}`, datos);
             } else {
