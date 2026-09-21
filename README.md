@@ -10,7 +10,7 @@ Front-end del sistema de gestión de **Cartoon Pizza**. Son tres módulos según
 
 El login admite correo/contraseña y Google. Todo lo que ocurre en una pantalla se refleja en las demás por WebSocket, sin recargar.
 
-Es un sitio **estático** (HTML + Bootstrap + JavaScript sin build). El back-end vive en otro repositorio: **[cartoon-pizza-api](../cartoon-pizza-api)**.
+Es un sitio **estático** (HTML + Bootstrap + JavaScript sin build). El back-end vive en otro repositorio: **[cartoon-pizza-api](https://github.com/Sofira28/cartoon-pizza-api)**.
 
 ## Estructura
 
