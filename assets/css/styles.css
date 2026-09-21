@@ -10,7 +10,8 @@
    5. Módulo Mesas
    6. Módulo Cocina
    7. Módulo Caja
-   8. Utilidades y accesibilidad
+   8. Módulo Administración
+   9. Utilidades y accesibilidad
    ========================================================================== */
 
 /* ===== 1. VARIABLES Y BASE ===== */
@@ -1237,7 +1238,41 @@ body.login-page {
     color: var(--color-red);
 }
 
-/* ===== 8. UTILIDADES Y ACCESIBILIDAD ===== */
+/* ===== 8. MÓDULO ADMINISTRACIÓN ===== */
+/* Reutiliza el panel lateral, las tarjetas de cifras y las tablas del módulo de caja */
+.admin-col-barra {
+    width: 35%;
+    min-width: 90px;
+}
+
+.barra-ventas {
+    height: 14px;
+    min-width: 2px;
+    background: var(--color-orange);
+    border: 2px solid var(--color-black);
+    border-radius: 8px;
+}
+
+.miniatura-producto {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border: var(--border-thin);
+    border-radius: var(--radius-sm);
+    background: white;
+}
+
+.vista-previa-producto {
+    width: 88px;
+    height: 88px;
+    flex-shrink: 0;
+    object-fit: cover;
+    border: var(--border-thin);
+    border-radius: var(--radius-sm);
+    background: white;
+}
+
+/* ===== 9. UTILIDADES Y ACCESIBILIDAD ===== */
 :focus-visible {
     outline: 3px solid var(--color-orange);
     outline-offset: 2px;

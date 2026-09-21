@@ -17,9 +17,12 @@ function escaparHtml(texto) {
     }[caracter]));
 }
 
-// Las imágenes de productos viven en assets/images; en la base pueden venir como "pizza.jpg" o "/images/pizza.jpg"
+// Imagen de un producto: las subidas desde el panel de administración viven en la API ("/api/images/<id>");
+// las de productos antiguos son archivos de assets/images ("pizza.jpg" o "/images/pizza.jpg")
 function urlImagen(imagen) {
-    const archivo = String(imagen || '').split('/').pop();
+    const valor = String(imagen || '');
+    if (valor.startsWith('/api/images/')) return `${APP_CONFIG.API_URL}${valor}`;
+    const archivo = valor.split('/').pop();
     return archivo ? `assets/images/${archivo}` : 'assets/images/LogoPizza.png';
 }
 

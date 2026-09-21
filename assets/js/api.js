@@ -16,7 +16,7 @@ const Auth = {
         mesero: 'mesas.html',
         cocina: 'cocina.html',
         caja: 'caja.html',
-        admin: 'caja.html'
+        admin: 'admin.html'
     },
 
     getToken() {
@@ -70,7 +70,9 @@ const Auth = {
 
 const Api = {
     async request(method, path, body, { auth = true } = {}) {
-        const headers = { 'Content-Type': 'application/json' };
+        // Un archivo (Blob) se envía tal cual con su propio tipo; el resto, como JSON
+        const esArchivo = body instanceof Blob;
+        const headers = { 'Content-Type': esArchivo ? body.type : 'application/json' };
         const token = Auth.getToken();
         if (auth && token) headers.Authorization = `Bearer ${token}`;
 
@@ -79,7 +81,7 @@ const Api = {
             response = await fetch(`${APP_CONFIG.API_URL}/api${path}`, {
                 method,
                 headers,
-                body: body === undefined ? undefined : JSON.stringify(body)
+                body: body === undefined || esArchivo ? body : JSON.stringify(body)
             });
         } catch {
             throw new ApiError('No se pudo conectar con el servidor', 0);
@@ -100,5 +102,7 @@ const Api = {
 
     get: (path, options) => Api.request('GET', path, undefined, options),
     post: (path, body, options) => Api.request('POST', path, body, options),
-    put: (path, body, options) => Api.request('PUT', path, body, options)
+    put: (path, body, options) => Api.request('PUT', path, body, options),
+    upload: (path, archivo, options) => Api.request('POST', path, archivo, options),
+    delete: (path, options) => Api.request('DELETE', path, undefined, options)
 };

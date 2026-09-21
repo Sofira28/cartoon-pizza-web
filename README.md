@@ -1,12 +1,13 @@
 # Cartoon Pizza · Web
 
-Front-end del sistema de gestión de **Cartoon Pizza**. Son tres módulos según el rol de quien inicia sesión:
+Front-end del sistema de gestión de **Cartoon Pizza**. Son cuatro módulos según el rol de quien inicia sesión:
 
 | Rol | Pantalla | Qué hace |
 |---|---|---|
 | Mesero | `mesas.html` | Elige mesa, arma el pedido y lo envía a cocina |
 | Cocina | `cocina.html` | Ve los pedidos en tiempo real y los pasa a preparando, listo y servido |
 | Caja | `caja.html` | Cobra los pedidos (efectivo, tarjeta o transferencia), controla mesas y ventas |
+| Administrador | `admin.html` | Panel de ventas de los últimos 7 días y gestión de usuarios (roles, activar/desactivar, restablecer contraseña), menú (con subida de fotos de los productos) y mesas. Desde su menú «Ir a» también entra a los demás módulos |
 
 El login admite correo/contraseña y Google. Todo lo que ocurre en una pantalla se refleja en las demás por WebSocket, sin recargar.
 
@@ -18,7 +19,7 @@ Es un sitio **estático** (HTML + Bootstrap + JavaScript sin build). El back-end
 ├── index.html               # Login y registro
 ├── registro-google.html     # Elegir rol tras entrar con Google por primera vez
 ├── auth-callback.html       # Punto de retorno del login con Google
-├── mesas.html · cocina.html · caja.html
+├── mesas.html · cocina.html · caja.html · admin.html
 └── assets/
     ├── css/styles.css
     ├── images/
@@ -26,7 +27,7 @@ Es un sitio **estático** (HTML + Bootstrap + JavaScript sin build). El back-end
         ├── config.js        # URL de la API (lo único que hay que editar al desplegar)
         ├── api.js           # Cliente de la API + sesión (JWT)
         ├── main.js          # Utilidades compartidas y conexión Socket.IO
-        └── login.js · registro-google.js · auth-callback.js · mesas.js · cocina.js · caja.js
+        └── login.js · registro-google.js · auth-callback.js · mesas.js · cocina.js · caja.js · admin.js
 ```
 
 ## Desarrollo local
