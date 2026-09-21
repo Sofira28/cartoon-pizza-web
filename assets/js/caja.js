@@ -1,16 +1,32 @@
+// Módulo de caja. Todo lo que se muestra viene de la API:
+//   /orders?active=true   pedidos abiertos
+//   /tables               mesas
+//   /reports/summary      cifras del día (ventas, facturas, método de pago)
+//   /reports/sales        ventas por día (reporte)
+//   /config               datos del negocio para la factura
 
 let usuarioActual = null;
-let pedidos = [];
+let pedidos = [];      // pedidos abiertos: pendientes, en cocina, listos y servidos
 let mesas = [];
+let resumen = null;    // cifras de hoy calculadas por el servidor
+let negocio = null;    // datos del negocio (config de la API)
 let pedidoActual = null;
 
 // Método de pago (valor que entiende la API) -> radio y panel del modal de facturación
 const METODOS_PAGO = {
-    cash: { radio: 'metodoEfectivo', panel: 'pagoEfectivo' },
-    card: { radio: 'metodoTarjeta', panel: 'pagoTarjeta' },
-    transfer: { radio: 'metodoTransferencia', panel: 'pagoTransferencia' }
+    cash: { radio: 'metodoEfectivo', panel: 'pagoEfectivo', etiqueta: 'Efectivo' },
+    card: { radio: 'metodoTarjeta', panel: 'pagoTarjeta', etiqueta: 'Tarjeta' },
+    transfer: { radio: 'metodoTransferencia', panel: 'pagoTransferencia', etiqueta: 'Transferencia' }
 };
 
+const ESTADOS_MESA = {
+    available: { texto: 'Disponible', clase: 'status-available' },
+    occupied: { texto: 'Ocupada', clase: 'status-occupied' },
+    reserved: { texto: 'Reservada', clase: 'status-reserved' },
+    maintenance: { texto: 'En mantenimiento', clase: 'status-maintenance' }
+};
+
+const ZONA_HORARIA = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 document.addEventListener('DOMContentLoaded', function() {
     inicializarModuloCaja();
@@ -19,20 +35,83 @@ document.addEventListener('DOMContentLoaded', function() {
 async function inicializarModuloCaja() {
     usuarioActual = await cargarDatosUsuario(['caja']);
     document.getElementById('nombreUsuario').textContent = usuarioActual.name;
-    
-    await cargarPedidos();
-    await cargarMesas();
-    configurarListenersSocket();
+
     configurarEventListenersCaja();
-    
-    // Actualizar datos cada 30 segundos
-    setInterval(cargarPedidos, 30000);
-    setInterval(cargarMesas, 30000);
+    establecerFechasReporte();
+    configurarListenersSocket();
+
+    await Promise.all([cargarNegocio(), refrescarTodo()]);
+
+    // Respaldo por si se pierde algún evento en tiempo real
+    setInterval(refrescarTodo, 30000);
 }
+
+// ===== Carga de datos =====
+
+// Rango "hoy" en la hora local del navegador, en formato ISO para la API
+function rangoHoy() {
+    const inicio = new Date();
+    inicio.setHours(0, 0, 0, 0);
+    const fin = new Date(inicio);
+    fin.setHours(23, 59, 59, 999);
+    return { from: inicio.toISOString(), to: fin.toISOString() };
+}
+
+// Carga pedidos, mesas y resumen a la vez y dibuja todo junto (así nada se pinta con datos a medias)
+async function refrescarTodo() {
+    const { from, to } = rangoHoy();
+    try {
+        [pedidos, mesas, resumen] = await Promise.all([
+            Api.get('/orders?active=true&sort=desc&limit=200'),
+            Api.get('/tables'),
+            Api.get(`/reports/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+        ]);
+        renderizarTodo();
+    } catch (error) {
+        console.error('Error cargando datos de caja:', error);
+        mostrarError('No se pudieron cargar los datos: ' + error.message);
+    }
+}
+
+async function cargarNegocio() {
+    try {
+        negocio = (await Api.get('/config')).business;
+    } catch (error) {
+        console.error('Error cargando datos del negocio:', error);
+        negocio = { name: 'Cartoon Pizza' };
+    }
+}
+
+// Varios eventos seguidos (pedido pagado + mesa liberada) provocan una sola recarga
+let temporizadorRefresco = null;
+function programarRefresco() {
+    clearTimeout(temporizadorRefresco);
+    temporizadorRefresco = setTimeout(refrescarTodo, 250);
+}
+
+function configurarListenersSocket() {
+    socket.on('orderStatusUpdate', programarRefresco);
+    socket.on('newOrder', programarRefresco);
+    socket.on('tableStatusUpdate', programarRefresco);
+}
+
+// ===== Utilidades =====
 
 // El back devuelve la mesa poblada ({ _id, number, ... }); esto obtiene su id en cualquier caso
 function idMesaDePedido(pedido) {
     return pedido.table?._id || pedido.table;
+}
+
+function pedidosPorCobrar() {
+    return pedidos.filter(pedido => pedido.status === 'ready' || pedido.status === 'served');
+}
+
+function pedidosActivosDeMesa(idMesa) {
+    return pedidos.filter(pedido => idMesaDePedido(pedido) === idMesa);
+}
+
+function codigoPedido(pedido) {
+    return pedido._id.toString().slice(-4);
 }
 
 // Mostrar un error visible sin bloquear la pantalla
@@ -44,160 +123,71 @@ function mostrarError(mensaje) {
     setTimeout(() => aviso.remove(), 4000);
 }
 
-// Cargar pedidos desde la API
-async function cargarPedidos() {
-    try {
-        pedidos = await Api.get('/orders?limit=200');
-        actualizarPanelPrincipal();
-        actualizarSeccionFacturacion();
-        actualizarSeccionMesas();
-    } catch (error) {
-        console.error('Error cargando pedidos:', error);
-        mostrarError('No se pudieron cargar los pedidos: ' + error.message);
-    }
+// ===== Dibujado =====
+
+function renderizarTodo() {
+    actualizarPanelPrincipal();
+    actualizarSelectorMesas();
+    actualizarSeccionFacturacion();
+    actualizarSeccionMesas();
+    actualizarResumenCaja();
 }
 
-// Cargar mesas desde la API
-async function cargarMesas() {
-    try {
-        mesas = await Api.get('/tables');
-        actualizarSeccionMesas();
-        actualizarSelectorMesas();
-    } catch (error) {
-        console.error('Error cargando mesas:', error);
-        mostrarError('No se pudieron cargar las mesas: ' + error.message);
-    }
-}
-
-// Configurar listeners de Socket.IO para caja
-function configurarListenersSocket() {
-    socket.on('orderStatusUpdate', (datos) => {
-        console.log('Actualización de pedido recibida:', datos);
-        cargarPedidos();
-    });
-
-    socket.on('newOrder', (datosPedido) => {
-        console.log('Nuevo pedido recibido:', datosPedido);
-        cargarPedidos();
-    });
-
-    socket.on('tableStatusUpdate', (datosMesa) => {
-        console.log('Actualización de mesa recibida:', datosMesa);
-        actualizarMesaEspecifica(datosMesa.tableId, datosMesa.status);
-        cargarMesas();
-    });
-}
-
-//
-function configurarEventListenersCaja() {
-    configurarNavegacion();
-    
-    // Métodos de pago
-    document.querySelectorAll('.payment-method').forEach(opcion => {
-        opcion.addEventListener('click', function() {
-            document.querySelectorAll('.payment-method').forEach(m => m.classList.remove('selected'));
-            this.classList.add('selected');
-            
-            const metodo = METODOS_PAGO[this.getAttribute('data-method')];
-            document.getElementById(metodo.radio).checked = true;
-            
-            // Mostrar solo el formulario del método elegido
-            Object.values(METODOS_PAGO).forEach(m => {
-                document.getElementById(m.panel).style.display = m === metodo ? 'block' : 'none';
-            });
-        });
-    });
-    
-    // Calcular cambio al modificar monto recibido
-    document.getElementById('montoRecibido').addEventListener('input', function() {
-        calcularCambio();
-    });
-
-    // Formatear automáticamente el monto recibido
-    document.getElementById('montoRecibido').addEventListener('blur', function() {
-        const valor = desformatearNumero(this.value);
-        this.value = formatearNumero(valor);
-        calcularCambio();
-    });
-
-    // Solo numeros en monto recibido
-    document.getElementById('montoRecibido').addEventListener('keypress', function(e) {
-        const charCode = e.which ? e.which : e.keyCode;
-        if (charCode > 31 && (charCode < 48 || charCode > 57)) {
-            e.preventDefault();
-        }
-    });
-}
-
-// Actualizar panel principal
 function actualizarPanelPrincipal() {
-    const hoy = new Date().toDateString();
-    const pedidosHoy = pedidos.filter(pedido => 
-        new Date(pedido.createdAt).toDateString() === hoy
-    );
-    
-    const ventasTotales = pedidosHoy
-        .filter(pedido => pedido.status === 'paid')
-        .reduce((suma, pedido) => suma + pedido.total, 0);
-    
-    const pedidosPendientes = pedidos.filter(pedido => 
-        pedido.status === 'ready' || pedido.status === 'served'
-    ).length;
-    
-    const pedidosCompletados = pedidos.filter(pedido => 
-        pedido.status === 'paid'
-    ).length;
-    
-    const mesasOcupadas = mesas.filter(mesa => 
-        mesa.status === 'occupied'
-    ).length;
+    const mesasOcupadas = mesas.filter(mesa => mesa.status === 'occupied').length;
 
-    document.getElementById('ventasTotales').textContent = formatearPesos(ventasTotales);
+    document.getElementById('ventasTotales').textContent = formatearPesos(resumen.sales);
     document.getElementById('mesasOcupadas').textContent = `${mesasOcupadas}/${mesas.length}`;
-    document.getElementById('pedidosPendientes').textContent = pedidosPendientes;
-    document.getElementById('pedidosCompletados').textContent = pedidosCompletados;
+    document.getElementById('pedidosPendientes').textContent = resumen.pendingBilling;
+    document.getElementById('pedidosCompletados').textContent = resumen.paidOrders;
 
-    // Actualizar tabla de pedidos recientes
-    const tablaPedidosRecientes = document.getElementById('tablaPedidosRecientes');
-    tablaPedidosRecientes.innerHTML = '';
-    
-    const pedidosRecientes = pedidos
-        .filter(pedido => pedido.status !== 'paid' && pedido.status !== 'cancelled')
-        .slice(0, 5);
-    
-    pedidosRecientes.forEach(pedido => {
+    const tabla = document.getElementById('tablaPedidosRecientes');
+    tabla.innerHTML = '';
+
+    const recientes = pedidos.slice(0, 5);
+    if (recientes.length === 0) {
+        tabla.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No hay pedidos abiertos</td></tr>';
+        return;
+    }
+
+    recientes.forEach(pedido => {
+        const cobrable = pedido.status === 'ready' || pedido.status === 'served';
         const fila = document.createElement('tr');
         fila.innerHTML = `
-            <td>${pedido._id.toString().slice(-4)}</td>
+            <td>${codigoPedido(pedido)}</td>
             <td>${pedido.tableNumber}</td>
             <td>${escaparHtml(pedido.waiterName)}</td>
             <td>${formatearPesos(pedido.total)}</td>
             <td><span class="badge badge-status ${obtenerClaseEstado(pedido.status)}">${obtenerTextoEstado(pedido.status)}</span></td>
             <td>${new Date(pedido.createdAt).toLocaleTimeString()}</td>
-            <td>
+            <td>${cobrable ? `
                 <button class="btn btn-sm btn-cash btn-process" onclick="abrirModalFacturacion('${pedido._id}')">
                     Facturar
-                </button>
+                </button>` : '<span class="text-muted small">En cocina</span>'}
             </td>
         `;
-        tablaPedidosRecientes.appendChild(fila);
+        tabla.appendChild(fila);
     });
 }
 
-// Actualizar sección de facturación
 function actualizarSeccionFacturacion() {
-    const pedidosFacturacion = pedidos.filter(pedido => 
-        pedido.status === 'ready' || pedido.status === 'served'
-    );
-    
-    const tablaFacturacion = document.getElementById('tablaPedidosFacturacion');
-    tablaFacturacion.innerHTML = '';
-    
-    pedidosFacturacion.forEach(pedido => {
+    const mesaFiltrada = document.getElementById('selectorMesa').value;
+    const lista = pedidosPorCobrar()
+        .filter(pedido => !mesaFiltrada || idMesaDePedido(pedido) === mesaFiltrada);
+
+    const tabla = document.getElementById('tablaPedidosFacturacion');
+    tabla.innerHTML = '';
+
+    if (lista.length === 0) {
+        tabla.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No hay pedidos por cobrar</td></tr>';
+        return;
+    }
+
+    lista.forEach(pedido => {
         const fila = document.createElement('tr');
         fila.innerHTML = `
             <td>${pedido.tableNumber}</td>
-            <td>${pedido._id.toString().slice(-4)}</td>
+            <td>${codigoPedido(pedido)}</td>
             <td>${escaparHtml(pedido.waiterName)}</td>
             <td>${formatearPesos(pedido.total)}</td>
             <td><span class="badge badge-status ${obtenerClaseEstado(pedido.status)}">${obtenerTextoEstado(pedido.status)}</span></td>
@@ -207,118 +197,157 @@ function actualizarSeccionFacturacion() {
                 </button>
             </td>
         `;
-        tablaFacturacion.appendChild(fila);
+        tabla.appendChild(fila);
     });
-
-    // Actualizar estadísticas de caja
-    actualizarEstadisticasCaja();
 }
 
-// Actualizar estadísticas de caja
-function actualizarEstadisticasCaja() {
-    const hoy = new Date().toDateString();
-    const pedidosPagadosHoy = pedidos.filter(pedido => 
-        pedido.status === 'paid' && 
-        new Date(pedido.createdAt).toDateString() === hoy
-    );
-    
-    const ventasTotales = pedidosPagadosHoy.reduce((suma, pedido) => suma + pedido.total, 0);
-    const facturasHoy = pedidosPagadosHoy.length;
-    const ticketPromedio = facturasHoy > 0 ? ventasTotales / facturasHoy : 0;
-    const pendientesFacturacion = pedidos.filter(pedido => 
-        pedido.status === 'ready' || pedido.status === 'served'
-    ).length;
+// Tarjetas de "Resumen de Caja" y "Estadísticas Rápidas" (cifras del servidor)
+function actualizarResumenCaja() {
+    const porMetodo = resumen.byPaymentMethod;
 
-    document.getElementById('ventasDiarias').textContent = formatearPesos(ventasTotales);
-    document.getElementById('facturasHoy').textContent = facturasHoy;
-    document.getElementById('ticketPromedio').textContent = formatearPesos(ticketPromedio);
-    document.getElementById('pendientesFacturacion').textContent = pendientesFacturacion;
-    document.getElementById('totalFacturado').textContent = formatearPesos(ventasTotales);
+    document.getElementById('ventasDiarias').textContent = formatearPesos(resumen.sales);
+    document.getElementById('ventasEfectivo').textContent = formatearPesos(porMetodo.cash);
+    document.getElementById('ventasTarjeta').textContent = formatearPesos(porMetodo.card);
+    document.getElementById('ventasTransferencia').textContent = formatearPesos(porMetodo.transfer);
+    document.getElementById('totalFacturado').textContent = formatearPesos(resumen.sales);
+
+    // Ventas de pedidos antiguos que se cobraron sin registrar el método de pago
+    document.getElementById('filaOtros').classList.toggle('d-none', porMetodo.unspecified === 0);
+    document.getElementById('ventasOtros').textContent = formatearPesos(porMetodo.unspecified);
+
+    document.getElementById('facturasHoy').textContent = resumen.paidOrders;
+    document.getElementById('ticketPromedio').textContent = formatearPesos(resumen.averageTicket);
+    document.getElementById('pendientesFacturacion').textContent = resumen.pendingBilling;
 }
 
-// Actualizar sección de mesas
 function actualizarSeccionMesas() {
-    const contenedorMesas = document.getElementById('contenedorMesas');
-    contenedorMesas.innerHTML = '';
-    
+    const contenedor = document.getElementById('contenedorMesas');
+    contenedor.innerHTML = '';
+
+    if (mesas.length === 0) {
+        contenedor.innerHTML = '<p class="text-muted">No hay mesas registradas.</p>';
+        return;
+    }
+
     mesas.forEach(mesa => {
-        const pedidosMesa = pedidos.filter(pedido => 
-            idMesaDePedido(pedido) === mesa._id && 
-            (pedido.status === 'pending' || pedido.status === 'preparing' || pedido.status === 'ready' || pedido.status === 'served')
-        );
-        
+        const estado = ESTADOS_MESA[mesa.status] || { texto: mesa.status, clase: '' };
+        const abiertos = pedidosActivosDeMesa(mesa._id).length;
+        const porCobrar = pedidosPorCobrar().filter(pedido => idMesaDePedido(pedido) === mesa._id).length;
+
         const columna = document.createElement('div');
-        columna.className = 'col-md-3 mb-3';
+        columna.className = 'col-sm-6 col-lg-4 col-xxl-3 mb-3';
         columna.innerHTML = `
-            <div class="card cartoon-shadow">
-                <div class="card-header ${mesa.status === 'occupied' ? 'status-occupied' : 'status-available'}">
+            <div class="card cartoon-shadow h-100">
+                <div class="card-header ${estado.clase}">
                     <h5 class="card-title mb-0">Mesa ${mesa.number}</h5>
                 </div>
                 <div class="card-body">
                     <p class="card-text">
-                        <strong>Estado:</strong> ${mesa.status === 'occupied' ? 'Ocupada' : 'Disponible'}<br>
+                        <strong>Estado:</strong> ${estado.texto}<br>
                         <strong>Capacidad:</strong> ${mesa.capacity} personas<br>
-                        <strong>Pedidos activos:</strong> ${pedidosMesa.length}
+                        <strong>Ubicación:</strong> ${escaparHtml(mesa.location)}<br>
+                        <strong>Pedidos abiertos:</strong> ${abiertos}
                     </p>
-                    ${pedidosMesa.length > 0 ? `
+                    ${porCobrar > 0 ? `
                         <button class="btn btn-sm btn-cash btn-process w-100" onclick="verPedidosMesa('${mesa._id}')">
-                            Ver Pedidos
+                            Cobrar (${porCobrar})
                         </button>
                     ` : ''}
                 </div>
             </div>
         `;
-        contenedorMesas.appendChild(columna);
+        contenedor.appendChild(columna);
     });
 }
 
-// Actualizar una mesa específica 
-function actualizarMesaEspecifica(idMesa, nuevoEstado) {
-    const mesaIndex = mesas.findIndex(mesa => mesa._id === idMesa);
-    if (mesaIndex !== -1) {
-        mesas[mesaIndex].status = nuevoEstado;
-        actualizarSeccionMesas();
-    }
-}
-
-// Actualizar selector de mesas
+// Selector de mesa de la sección de facturación (conserva la mesa elegida al recargar)
 function actualizarSelectorMesas() {
-    const selectorMesa = document.getElementById('selectorMesa');
-    selectorMesa.innerHTML = '<option value="">Seleccionar mesa...</option>';
-    
+    const selector = document.getElementById('selectorMesa');
+    const seleccionada = selector.value;
+    selector.innerHTML = '<option value="">Todas las mesas</option>';
+
     mesas.forEach(mesa => {
         const opcion = document.createElement('option');
         opcion.value = mesa._id;
         opcion.textContent = `Mesa ${mesa.number}`;
-        selectorMesa.appendChild(opcion);
+        selector.appendChild(opcion);
+    });
+    selector.value = seleccionada;
+}
+
+// Lleva a la sección de facturación filtrada por la mesa
+function verPedidosMesa(idMesa) {
+    document.getElementById('selectorMesa').value = idMesa;
+    actualizarSeccionFacturacion();
+    document.querySelector('.sidebar .nav-link[data-section="billing"]').click();
+}
+
+// ===== Eventos de la pantalla =====
+
+function configurarEventListenersCaja() {
+    configurarNavegacion();
+
+    document.getElementById('selectorMesa').addEventListener('change', actualizarSeccionFacturacion);
+
+    // Métodos de pago
+    document.querySelectorAll('.payment-method').forEach(opcion => {
+        opcion.addEventListener('click', function() {
+            seleccionarMetodoPago(this.getAttribute('data-method'));
+        });
+    });
+
+    const montoRecibido = document.getElementById('montoRecibido');
+    montoRecibido.addEventListener('input', calcularCambio);
+
+    // Formatear automáticamente el monto recibido
+    montoRecibido.addEventListener('blur', function() {
+        this.value = formatearNumero(desformatearNumero(this.value));
+        calcularCambio();
+    });
+
+    // Solo números en monto recibido
+    montoRecibido.addEventListener('keypress', function(e) {
+        const codigo = e.which ? e.which : e.keyCode;
+        if (codigo > 31 && (codigo < 48 || codigo > 57)) {
+            e.preventDefault();
+        }
     });
 }
 
-// Abrir modal de facturación
-async function abrirModalFacturacion(idPedido) {
+function seleccionarMetodoPago(metodo) {
+    document.querySelectorAll('.payment-method').forEach(opcion => {
+        opcion.classList.toggle('selected', opcion.getAttribute('data-method') === metodo);
+    });
+    document.getElementById(METODOS_PAGO[metodo].radio).checked = true;
+
+    // Mostrar solo el formulario del método elegido
+    Object.entries(METODOS_PAGO).forEach(([clave, datos]) => {
+        document.getElementById(datos.panel).style.display = clave === metodo ? 'block' : 'none';
+    });
+}
+
+// ===== Facturación =====
+
+function abrirModalFacturacion(idPedido) {
     const pedido = pedidos.find(p => p._id === idPedido);
     if (!pedido) return;
-    
+
+    if (pedido.status !== 'ready' && pedido.status !== 'served') {
+        alert('Este pedido todavía no está listo para cobrar.');
+        return;
+    }
+
     pedidoActual = pedido;
-    
+
     document.getElementById('numeroMesaModal').textContent = pedido.tableNumber;
-    document.getElementById('idPedidoModal').textContent = pedido._id.toString().slice(-4);
+    document.getElementById('idPedidoModal').textContent = codigoPedido(pedido);
     document.getElementById('meseroModal').textContent = pedido.waiterName;
     document.getElementById('horaModal').textContent = new Date(pedido.createdAt).toLocaleTimeString();
-    
-    // Calcular impuestos y total
-    const subtotal = pedido.total;
-    const impuestos = subtotal * 0.10;
-    const total = subtotal + impuestos;
-    
-    document.getElementById('subtotalModal').textContent = formatearPesos(subtotal);
-    document.getElementById('impuestosModal').textContent = formatearPesos(impuestos);
-    document.getElementById('totalModal').textContent = formatearPesos(total);
-    
-    // Llenar tabla de items
+    document.getElementById('totalModal').textContent = formatearPesos(pedido.total);
+    dibujarDatosNegocio();
+
     const tablaItems = document.getElementById('tablaItemsModal');
     tablaItems.innerHTML = '';
-    
     pedido.items.forEach(item => {
         const fila = document.createElement('tr');
         fila.innerHTML = `
@@ -329,28 +358,40 @@ async function abrirModalFacturacion(idPedido) {
         `;
         tablaItems.appendChild(fila);
     });
-    
-    // Resetear formulario de pago
-    document.getElementById('montoRecibido').value = formatearNumero(total);
+
+    // Formulario de pago limpio
+    seleccionarMetodoPago('cash');
+    document.getElementById('montoRecibido').value = formatearNumero(pedido.total);
     calcularCambio();
-    
-    const modal = new bootstrap.Modal(document.getElementById('modalFacturacion'));
-    modal.show();
+
+    new bootstrap.Modal(document.getElementById('modalFacturacion')).show();
 }
 
-// Calcular cambio
+// Muestra solo los datos del negocio que estén configurados en la API
+function dibujarDatosNegocio() {
+    const datos = negocio || { name: 'Cartoon Pizza' };
+    const lineas = [
+        datos.address,
+        datos.phone && `Tel: ${datos.phone}`,
+        datos.taxId && `NIT: ${datos.taxId}`
+    ].filter(Boolean);
+
+    document.getElementById('datosNegocio').innerHTML = `
+        <h6 style="font-family: 'Bangers', cursive; color: var(--color-red);">${escaparHtml(datos.name)}</h6>
+        ${lineas.map(linea => `<p class="mb-1">${escaparHtml(linea)}</p>`).join('')}
+    `;
+}
+
 function calcularCambio() {
-    const total = parseFloat(document.getElementById('totalModal').textContent.replace(/[^\d]/g, '')) || 0;
+    const total = pedidoActual ? pedidoActual.total : 0;
     const recibido = desformatearNumero(document.getElementById('montoRecibido').value);
     const cambio = recibido - total;
-    
+
     const displayCambio = document.getElementById('displayCambio');
     if (cambio >= 0) {
         displayCambio.innerHTML = `<strong>Cambio:</strong> ${formatearPesos(cambio)}`;
-        displayCambio.style.color = 'var(--color-red)';
     } else {
-        displayCambio.innerHTML = `<strong style="color: var(--color-red);">Faltan:</strong> ${formatearPesos(Math.abs(cambio))}`;
-        displayCambio.style.color = 'var(--color-red)';
+        displayCambio.innerHTML = `<strong>Faltan:</strong> ${formatearPesos(Math.abs(cambio))}`;
     }
 }
 
@@ -358,132 +399,125 @@ function calcularCambio() {
 // y avisa por Socket.IO a los demás módulos.
 async function procesarPago() {
     if (!pedidoActual) return;
-    
+
     const metodoPago = document.querySelector('input[name="metodoPago"]:checked').value;
     const montoRecibido = desformatearNumero(document.getElementById('montoRecibido').value);
-    const total = parseFloat(document.getElementById('totalModal').textContent.replace(/[^\d]/g, '')) || 0;
-    
-    if (metodoPago === 'cash' && montoRecibido < total) {
+
+    if (metodoPago === 'cash' && montoRecibido < pedidoActual.total) {
         alert('El monto recibido es menor al total a pagar');
         return;
     }
-    
+
     try {
         await Api.put(`/orders/${pedidoActual._id}/status`, { status: 'paid', paymentMethod: metodoPago });
 
-        alert('Pago procesado correctamente');
         bootstrap.Modal.getInstance(document.getElementById('modalFacturacion')).hide();
         pedidoActual = null;
-
-        await Promise.all([cargarPedidos(), cargarMesas()]);
+        await refrescarTodo();
+        alert('Pago procesado correctamente');
     } catch (error) {
         console.error('Error procesando pago:', error);
         alert('No se pudo procesar el pago: ' + error.message);
     }
 }
 
-// Imprimir factura
 function imprimirFactura() {
     window.print();
 }
 
-// Buscar pedido
+// Buscar pedido por su número (los últimos caracteres del identificador)
 function buscarPedido() {
-    const terminoBusqueda = document.getElementById('buscarPedido').value.trim();
-    if (!terminoBusqueda) return;
-    
-    const pedido = pedidos.find(p => p._id.toString().includes(terminoBusqueda));
-    if (pedido) {
+    const termino = document.getElementById('buscarPedido').value.trim().toLowerCase();
+    if (!termino) return;
+
+    const pedido = pedidos.find(p => p._id.toString().toLowerCase().includes(termino));
+    if (!pedido) {
+        alert('No hay un pedido abierto con ese número');
+    } else if (pedido.status === 'ready' || pedido.status === 'served') {
         abrirModalFacturacion(pedido._id);
     } else {
-        alert('Pedido no encontrado');
+        alert(`El pedido ${codigoPedido(pedido)} todavía no está listo para cobrar (estado: ${obtenerTextoEstado(pedido.status)}).`);
     }
 }
 
-// Generar reporte de ventas a partir de los pedidos pagados que hay cargados
-function generarReporteVentas() {
+// ===== Reportes =====
+
+// Las fechas del reporte arrancan en el día de hoy
+function establecerFechasReporte() {
+    const hoy = new Date().toLocaleDateString('en-CA');
+    document.getElementById('fechaInicio').value = hoy;
+    document.getElementById('fechaFin').value = hoy;
+}
+
+async function generarReporteVentas() {
     const fechaInicio = document.getElementById('fechaInicio').value;
     const fechaFin = document.getElementById('fechaFin').value;
-    
+
     if (!fechaInicio || !fechaFin) {
         alert('Por favor selecciona ambas fechas');
         return;
     }
 
-    // Fecha local del pedido en formato YYYY-MM-DD (comparable con los inputs de fecha)
-    const diaLocal = (fecha) => new Date(fecha).toLocaleDateString('en-CA');
+    // Los días completos, en la hora local
+    const desde = new Date(`${fechaInicio}T00:00:00`);
+    const hasta = new Date(`${fechaFin}T23:59:59.999`);
+    const tabla = document.getElementById('tablaReporteVentas');
 
-    const ventasPorDia = {};
-    pedidos
-        .filter(pedido => pedido.status === 'paid')
-        .forEach(pedido => {
-            const dia = diaLocal(pedido.paidAt || pedido.updatedAt || pedido.createdAt);
-            if (dia < fechaInicio || dia > fechaFin) return;
-            ventasPorDia[dia] = ventasPorDia[dia] || { total: 0, cantidad: 0 };
-            ventasPorDia[dia].total += pedido.total;
-            ventasPorDia[dia].cantidad += 1;
-        });
+    try {
+        const dias = await Api.get(
+            `/reports/sales?from=${encodeURIComponent(desde.toISOString())}&to=${encodeURIComponent(hasta.toISOString())}` +
+            `&timezone=${encodeURIComponent(ZONA_HORARIA)}`
+        );
 
-    const dias = Object.keys(ventasPorDia).sort();
-    const tablaReporte = document.getElementById('tablaReporteVentas');
+        if (dias.length === 0) {
+            tabla.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No hay ventas en ese rango</td></tr>';
+            return;
+        }
 
-    if (dias.length === 0) {
-        tablaReporte.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No hay ventas en ese rango</td></tr>';
-        return;
+        const total = dias.reduce((suma, dia) => suma + dia.total, 0);
+        const facturas = dias.reduce((suma, dia) => suma + dia.orders, 0);
+
+        tabla.innerHTML = dias.map(dia => `
+            <tr>
+                <td>${dia.date.split('-').reverse().join('/')}</td>
+                <td>${formatearPesos(dia.total)}</td>
+                <td>${dia.orders}</td>
+                <td>${formatearPesos(dia.averageTicket)}</td>
+            </tr>
+        `).join('') + `
+            <tr class="fw-bold table-warning">
+                <td>Total</td>
+                <td>${formatearPesos(total)}</td>
+                <td>${facturas}</td>
+                <td>${formatearPesos(Math.round(total / facturas))}</td>
+            </tr>
+        `;
+    } catch (error) {
+        console.error('Error generando reporte:', error);
+        alert('No se pudo generar el reporte: ' + error.message);
     }
-
-    tablaReporte.innerHTML = dias.map(dia => `
-        <tr>
-            <td>${dia}</td>
-            <td>${formatearPesos(ventasPorDia[dia].total)}</td>
-            <td>${ventasPorDia[dia].cantidad}</td>
-            <td>${formatearPesos(ventasPorDia[dia].total / ventasPorDia[dia].cantidad)}</td>
-            <td></td>
-        </tr>
-    `).join('');
 }
 
-// Generar corte de caja
+// Corte de caja con las cifras del día que calcula el servidor
 function generarCorteCaja() {
-    const hoy = new Date().toLocaleDateString();
-    const ventasDiarias = desformatearNumero(document.getElementById('ventasDiarias').textContent);
-    const facturasHoy = document.getElementById('facturasHoy').textContent;
-    const ticketPromedio = desformatearNumero(document.getElementById('ticketPromedio').textContent);
-    
-    const datosReporte = `
-        CORTE DE CAJA - ${hoy}
-        ========================
-        Ventas del día: ${formatearPesos(ventasDiarias)}
-        Facturas emitidas: ${facturasHoy}
-        Ticket promedio: ${formatearPesos(ticketPromedio)}
-        ========================
-        Generado por: ${document.getElementById('nombreUsuario').textContent}
-        Hora: ${new Date().toLocaleTimeString()}
-    `;
-    
-    alert('Corte de caja generado:\n\n' + datosReporte);
-}
+    if (!resumen) return;
 
-// Ver pedidos de una mesa
-function verPedidosMesa(idMesa) {
-    const pedidosMesa = pedidos.filter(pedido => 
-        idMesaDePedido(pedido) === idMesa && 
-        (pedido.status === 'ready' || pedido.status === 'served')
-    );
-    
-    if (pedidosMesa.length === 0) {
-        alert('No hay pedidos pendientes para esta mesa');
-        return;
-    }
-    
-    if (pedidosMesa.length === 1) {
-        abrirModalFacturacion(pedidosMesa[0]._id);
-    } else {
-        let mensaje = 'Pedidos pendientes para esta mesa:\n\n';
-        pedidosMesa.forEach(pedido => {
-            mensaje += `• Pedido ${pedido._id.toString().slice(-4)} - ${formatearPesos(pedido.total)}\n`;
-        });
-        mensaje += '\nSelecciona un pedido para facturar.';
-        alert(mensaje);
-    }
+    const porMetodo = resumen.byPaymentMethod;
+    const lineas = [
+        `CORTE DE CAJA - ${new Date().toLocaleDateString()}`,
+        '========================',
+        `Ventas del día: ${formatearPesos(resumen.sales)}`,
+        `   Efectivo: ${formatearPesos(porMetodo.cash)}`,
+        `   Tarjeta: ${formatearPesos(porMetodo.card)}`,
+        `   Transferencia: ${formatearPesos(porMetodo.transfer)}`,
+        ...(porMetodo.unspecified ? [`   Sin método registrado: ${formatearPesos(porMetodo.unspecified)}`] : []),
+        `Facturas emitidas: ${resumen.paidOrders}`,
+        `Ticket promedio: ${formatearPesos(resumen.averageTicket)}`,
+        `Pedidos por cobrar: ${resumen.pendingBilling}`,
+        '========================',
+        `Generado por: ${usuarioActual.name}`,
+        `Hora: ${new Date().toLocaleTimeString()}`
+    ];
+
+    alert(lineas.join('\n'));
 }

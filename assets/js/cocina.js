@@ -5,6 +5,9 @@ let filtrosActuales = {
 };
 let temporizadores = {};
 
+// Un pedido pendiente o en preparación pasa a "urgente" (borde rojo parpadeante) tras este tiempo
+const MINUTOS_URGENTE = 15;
+
 
 document.addEventListener('DOMContentLoaded', function() {
     inicializarModuloCocina();
@@ -86,15 +89,15 @@ function renderizarPedidos() {
     
     pedidosFiltrados.forEach(pedido => {
         const elementoPedido = document.createElement('div');
-        elementoPedido.className = `col-md-6 col-lg-4`;
         elementoPedido.dataset.id = pedido._id;
         
         const claseEstado = obtenerClaseEstado(pedido.status);
         const textoEstado = obtenerTextoEstado(pedido.status);
         const tiempoTranscurrido = obtenerTiempoTranscurrido(new Date(pedido.createdAt));
+        const esUrgente = ['pending', 'preparing'].includes(pedido.status) && tiempoTranscurrido > MINUTOS_URGENTE * 60000;
         
         elementoPedido.innerHTML = `
-            <div class="order-card">
+            <div class="order-card${esUrgente ? ' urgent' : ''}">
                 <div class="order-header d-flex justify-content-between align-items-center ${obtenerClaseEncabezadoEstado(pedido.status)}">
                     <div>
                         <span class="badge status-badge ${claseEstado}">${textoEstado}</span>
@@ -107,7 +110,7 @@ function renderizarPedidos() {
                     <p class="text-muted small">Mesero: ${escaparHtml(pedido.waiterName)}</p>
                     
                     ${pedido.notes ? `
-                    <div class="order-item mb-2" style="background-color: #fff3cd; border-left: 4px solid #ffc107;">
+                    <div class="order-note">
                         <i class="bi bi-chat-dots me-1"></i><strong>Observaciones del Pedido:</strong> ${escaparHtml(pedido.notes)}
                     </div>
                     ` : ''}

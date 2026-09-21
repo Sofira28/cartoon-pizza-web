@@ -7,6 +7,14 @@ let cantidadActual = 1;
 
 // Items que la mesa ya tiene pedidos (solo lectura); pedidoActual contiene únicamente los nuevos
 let pedidoExistente = [];
+let mesaActualNumero = null;
+
+const ESTADOS_MESA = {
+    available: 'Libre',
+    occupied: 'Ocupada',
+    reserved: 'Reservada',
+    maintenance: 'En mantenimiento'
+};
 
 // Inicialización del módulo mesas
 document.addEventListener('DOMContentLoaded', function() {
@@ -51,16 +59,29 @@ function renderizarMesas(mesas) {
         
         if (mesa.status === 'occupied') {
             claseBoton += 'occupied-table';
+        } else if (mesa.status === 'reserved') {
+            claseBoton += 'reserved-table';
+        } else if (mesa.status === 'maintenance') {
+            claseBoton += 'maintenance-table';
         } else if (mesa._id === mesaActual) {
             claseBoton += 'active-table';
         } else {
             claseBoton += 'btn-outline-primary';
         }
+
+        // La mesa seleccionada siempre se distingue, sea cual sea su estado
+        if (mesa._id === mesaActual) {
+            claseBoton += ' selected-table';
+        }
         
         botonMesa.className = claseBoton;
         botonMesa.textContent = mesa.number;
-        botonMesa.title = `Mesa ${mesa.number} - ${mesa.capacity} personas`;
-        botonMesa.onclick = () => seleccionarMesa(mesa._id, mesa.number);
+        botonMesa.title = `Mesa ${mesa.number} - ${mesa.capacity} personas - ${ESTADOS_MESA[mesa.status] || mesa.status}`;
+        if (mesa.status === 'maintenance') {
+            botonMesa.disabled = true;
+        } else {
+            botonMesa.onclick = () => seleccionarMesa(mesa._id, mesa.number);
+        }
         contenedorGrid.appendChild(botonMesa);
     });
     
@@ -112,11 +133,10 @@ function renderizarProductos(productos) {
         contenedor.appendChild(tituloCategoria);
         
         const fila = document.createElement('div');
-        fila.className = 'row';
+        fila.className = 'product-grid';
         
         productosCategoria.forEach(producto => {
             const columna = document.createElement('div');
-            columna.className = 'col-md-3 col-sm-6 mb-3';
             
             columna.innerHTML = `
                 <div class="card product-card">
@@ -138,7 +158,6 @@ function renderizarProductos(productos) {
         });
         
         contenedor.appendChild(fila);
-        contenedor.appendChild(document.createElement('hr'));
     });
 }
 
@@ -146,6 +165,8 @@ function renderizarProductos(productos) {
 async function seleccionarMesa(idMesa, numeroMesa) {
     mesaActual = idMesa;
     document.getElementById('badgeMesaActual').textContent = `Mesa: ${numeroMesa}`;
+    mesaActualNumero = numeroMesa;
+    actualizarBarraPedido();
     
     // Actualizar visualización de mesas
     cargarMesas();
@@ -406,6 +427,7 @@ function actualizarVisualizacionPedido() {
     const total = [...pedidoExistente, ...pedidoActual]
         .reduce((suma, item) => suma + item.price * item.quantity, 0);
     elementoTotal.textContent = formatearPesos(total);
+    actualizarBarraPedido();
     
     contenedorPedidos.innerHTML = '';
     
@@ -458,6 +480,22 @@ function actualizarVisualizacionPedido() {
         `;
         contenedorPedidos.appendChild(elementoItem);
     });
+}
+
+// Barra fija inferior (móvil y tablet): mesa, cantidad y total de lo que falta por enviar
+function actualizarBarraPedido() {
+    const cantidad = pedidoActual.reduce((suma, item) => suma + item.quantity, 0);
+    const total = pedidoActual.reduce((suma, item) => suma + item.price * item.quantity, 0);
+
+    document.getElementById('barraMesa').textContent = mesaActualNumero
+        ? `Mesa ${mesaActualNumero} · ${cantidad} por enviar`
+        : 'Selecciona una mesa';
+    document.getElementById('barraTotal').textContent = formatearPesos(total);
+}
+
+// Lleva al panel del pedido (útil en pantallas pequeñas, donde queda arriba del menú)
+function verPanelPedido() {
+    document.getElementById('panelPedido').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Eliminar item del pedido
