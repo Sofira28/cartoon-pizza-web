@@ -24,16 +24,7 @@
                 <span class="navbar-text me-3">
                     <i class="bi bi-person-circle me-1"></i>Admin: <span id="nombreUsuario">Cargando...</span>
                 </span>
-                <div class="dropdown me-2">
-                    <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-grid me-1"></i><span class="btn-text">Ir a</span>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="mesas.html"><i class="bi bi-cup-hot me-2"></i>Mesas y pedidos</a></li>
-                        <li><a class="dropdown-item" href="cocina.html"><i class="bi bi-fire me-2"></i>Cocina</a></li>
-                        <li><a class="dropdown-item" href="caja.html"><i class="bi bi-cash-coin me-2"></i>Caja</a></li>
-                    </ul>
-                </div>
+                <div id="menuIrA" class="d-inline-block"></div>
                 <button class="btn btn-danger" onclick="cerrarSesion()">
                     <i class="bi bi-box-arrow-right me-1"></i><span class="btn-text">Salir</span>
                 </button>
@@ -65,6 +56,11 @@
                         <li class="nav-item">
                             <a class="nav-link" href="#tables" data-section="tables">
                                 <i class="bi bi-table me-2"></i>Mesas
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#stats" data-section="stats">
+                                <i class="bi bi-graph-up-arrow me-2"></i>Estadísticas
                             </a>
                         </li>
                     </ul>
@@ -277,6 +273,112 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Estadísticas -->
+                <div id="stats-section" class="content-section">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+                        <h2 class="mb-0" style="font-family: 'Bangers', cursive; color: var(--color-red);">
+                            <i class="bi bi-graph-up-arrow me-2"></i>Estadísticas
+                        </h2>
+                        <div id="botonesExportarEstadisticas" class="d-none">
+                            <button class="btn btn-sm btn-light" onclick="exportarEstadisticasExcel()">
+                                <i class="bi bi-file-earmark-excel me-1"></i>Excel
+                            </button>
+                            <button class="btn btn-sm btn-light" onclick="exportarEstadisticasPDF()">
+                                <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card cartoon-shadow mb-4">
+                        <div class="card-body">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-6 col-md-3">
+                                    <label for="statsFechaInicio" class="form-label fw-bold">Desde</label>
+                                    <input type="date" class="form-control" id="statsFechaInicio">
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <label for="statsFechaFin" class="form-label fw-bold">Hasta</label>
+                                    <input type="date" class="form-control" id="statsFechaFin">
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <button class="btn btn-cash btn-process w-100" onclick="generarEstadisticas()">Generar</button>
+                                </div>
+                                <div class="col-6 col-md-3 d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-primary w-50" onclick="fijarRangoEstadisticas(7)">7 días</button>
+                                    <button class="btn btn-sm btn-outline-primary w-50" onclick="fijarRangoEstadisticas(30)">30 días</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h5 class="mb-3" style="font-family: 'Bangers', cursive; color: var(--color-teal-dark);">Comparación de periodos</h5>
+                    <div class="row" id="comparacionPeriodos"></div>
+
+                    <div class="row">
+                        <div class="col-xl-6 mb-4">
+                            <div class="card cartoon-shadow h-100">
+                                <div class="card-header back titulo-chess">
+                                    <i class="bi bi-trophy me-2"></i>Productos más vendidos
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-striped mb-0">
+                                        <thead>
+                                            <tr><th>#</th><th>Producto</th><th>Cantidad</th><th>Ingresos</th></tr>
+                                        </thead>
+                                        <tbody id="tablaTopProductos"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-6 mb-4">
+                            <div class="card cartoon-shadow h-100">
+                                <div class="card-header back titulo-chess">
+                                    <i class="bi bi-pie-chart me-2"></i>Ventas por categoría
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped mb-0">
+                                        <thead>
+                                            <tr><th>Categoría</th><th>Cantidad</th><th>Ingresos</th><th></th></tr>
+                                        </thead>
+                                        <tbody id="tablaCategorias"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-6 mb-4">
+                            <div class="card cartoon-shadow h-100">
+                                <div class="card-header back titulo-chess">
+                                    <i class="bi bi-person-badge me-2"></i>Desempeño por mesero
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-striped mb-0">
+                                        <thead>
+                                            <tr><th>Mesero</th><th>Pedidos</th><th>Ventas</th><th>Ticket prom.</th></tr>
+                                        </thead>
+                                        <tbody id="tablaMeseros"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-6 mb-4">
+                            <div class="card cartoon-shadow h-100">
+                                <div class="card-header back titulo-chess">
+                                    <i class="bi bi-table me-2"></i>Mesas más activas
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-striped mb-0">
+                                        <thead>
+                                            <tr><th>Mesa</th><th>Pedidos</th><th>Ventas</th></tr>
+                                        </thead>
+                                        <tbody id="tablaMesasActivas"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
             </div>
         </div>
     </div>
@@ -410,9 +512,14 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Exportar reportes a Excel y PDF (solo se usan al generar estadísticas) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
     <script src="assets/js/config.js"></script>
     <script src="assets/js/api.js"></script>
     <script src="assets/js/main.js"></script>
+    <script src="assets/js/export.js"></script>
     <script src="assets/js/admin.js"></script>
 </body>
 </html>

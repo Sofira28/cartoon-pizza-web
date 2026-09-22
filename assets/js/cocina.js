@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function inicializarModuloCocina() {
     usuarioActual = await cargarDatosUsuario(['cocina']);
+    configurarNavegacionAdmin(usuarioActual);
     document.getElementById('nombreUsuario').textContent = usuarioActual.name;
     
     await cargarPedidos();

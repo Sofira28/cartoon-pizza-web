@@ -7,7 +7,9 @@ Front-end del sistema de gestión de **Cartoon Pizza**. Son cuatro módulos seg�
 | Mesero | `mesas.html` | Elige mesa, arma el pedido y lo envía a cocina |
 | Cocina | `cocina.html` | Ve los pedidos en tiempo real y los pasa a preparando, listo y servido |
 | Caja | `caja.html` | Cobra los pedidos (efectivo, tarjeta o transferencia), controla mesas y ventas |
-| Administrador | `admin.html` | Panel de ventas de los últimos 7 días y gestión de usuarios (roles, activar/desactivar, restablecer contraseña), menú (con subida de fotos de los productos) y mesas. Desde su menú «Ir a» también entra a los demás módulos |
+| Administrador | `admin.html` | Panel de ventas de los últimos 7 días, estadísticas del negocio (comparación de periodos, productos más vendidos, ventas por categoría, desempeño por mesero y por mesa, exportables a Excel y PDF) y gestión de usuarios (roles, activar/desactivar, restablecer contraseña), menú (con subida de fotos de los productos) y mesas. Desde su menú «Ir a» —visible en todas las pantallas cuando quien entró es admin— se mueve entre su panel y las de mesero, cocina y caja |
+
+El reporte de ventas de Caja también se puede exportar a Excel y PDF.
 
 El login admite correo/contraseña y Google. Todo lo que ocurre en una pantalla se refleja en las demás por WebSocket, sin recargar.
 
@@ -26,7 +28,8 @@ Es un sitio **estático** (HTML + Bootstrap + JavaScript sin build). El back-end
     └── js/
         ├── config.js        # URL de la API (lo único que hay que editar al desplegar)
         ├── api.js           # Cliente de la API + sesión (JWT)
-        ├── main.js          # Utilidades compartidas y conexión Socket.IO
+        ├── main.js          # Utilidades compartidas, conexión Socket.IO y el menú "Ir a" del admin
+        ├── export.js        # Exportar reportes a Excel (SheetJS) y PDF (jsPDF), todo en el navegador
         └── login.js · registro-google.js · auth-callback.js · mesas.js · cocina.js · caja.js · admin.js
 ```
 

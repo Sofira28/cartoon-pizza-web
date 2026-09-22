@@ -1272,6 +1272,24 @@ body.login-page {
     background: white;
 }
 
+/* Estadísticas: tarjetas de comparación de periodos (mismo estilo que dashboard-card, color neutro) */
+.dashboard-card.stat-comparacion {
+    background-color: var(--color-teal);
+    color: white;
+}
+
+.stat-cambio {
+    margin-top: 6px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.stat-cambio.cambio-positivo { color: var(--color-yellow); }
+.stat-cambio.cambio-negativo { color: #ffb3c1; }
+
 /* ===== 9. UTILIDADES Y ACCESIBILIDAD ===== */
 :focus-visible {
     outline: 3px solid var(--color-orange);

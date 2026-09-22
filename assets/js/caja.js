@@ -11,6 +11,7 @@ let mesas = [];
 let resumen = null;    // cifras de hoy calculadas por el servidor
 let negocio = null;    // datos del negocio (config de la API)
 let pedidoActual = null;
+let reporteVentasActual = null; // último reporte generado, para exportar a Excel/PDF sin volver a pedirlo
 
 // Método de pago (valor que entiende la API) -> radio y panel del modal de facturación
 const METODOS_PAGO = {
@@ -34,6 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function inicializarModuloCaja() {
     usuarioActual = await cargarDatosUsuario(['caja']);
+    configurarNavegacionAdmin(usuarioActual);
     document.getElementById('nombreUsuario').textContent = usuarioActual.name;
 
     configurarEventListenersCaja();
@@ -462,6 +464,8 @@ async function generarReporteVentas() {
     const desde = new Date(`${fechaInicio}T00:00:00`);
     const hasta = new Date(`${fechaFin}T23:59:59.999`);
     const tabla = document.getElementById('tablaReporteVentas');
+    document.getElementById('botonesExportarReporte').classList.add('d-none');
+    reporteVentasActual = null;
 
     try {
         const dias = await Api.get(
@@ -492,10 +496,48 @@ async function generarReporteVentas() {
                 <td>${formatearPesos(Math.round(total / facturas))}</td>
             </tr>
         `;
+
+        reporteVentasActual = { desde, hasta, dias, total, facturas };
+        document.getElementById('botonesExportarReporte').classList.remove('d-none');
     } catch (error) {
         console.error('Error generando reporte:', error);
         alert('No se pudo generar el reporte: ' + error.message);
     }
+}
+
+// Columnas del reporte de ventas por día, compartidas entre Excel y PDF (cada uno decide cómo mostrar el monto)
+function columnasReporteVentas() {
+    return [
+        { clave: 'fecha', titulo: 'Fecha' },
+        { clave: 'ventas', titulo: 'Total ventas', moneda: true },
+        { clave: 'facturas', titulo: 'Nº facturas' },
+        { clave: 'ticket', titulo: 'Ticket promedio', moneda: true }
+    ];
+}
+
+function filasReporteVentas({ dias, total, facturas }, formatoFecha) {
+    const filas = dias.map(dia => ({ fecha: formatoFecha(dia.date), ventas: dia.total, facturas: dia.orders, ticket: dia.averageTicket }));
+    filas.push({ fecha: 'Total', ventas: total, facturas, ticket: facturas ? Math.round(total / facturas) : 0 });
+    return filas;
+}
+
+function exportarReporteExcel() {
+    if (!reporteVentasActual) return;
+    const { desde, hasta } = reporteVentasActual;
+    const columnas = columnasReporteVentas().map(col => ({ ...col, titulo: col.moneda ? `${col.titulo} (COP)` : col.titulo }));
+    const filas = filasReporteVentas(reporteVentasActual, (fecha) => fecha); // "YYYY-MM-DD": se ordena bien en Excel
+    descargarExcel(`${nombreArchivoConFecha('reporte_ventas', desde, hasta)}.xlsx`, [{ nombre: 'Ventas por día', columnas, filas }]);
+}
+
+function exportarReportePDF() {
+    if (!reporteVentasActual) return;
+    const { desde, hasta } = reporteVentasActual;
+    descargarPDF({
+        archivo: `${nombreArchivoConFecha('reporte_ventas', desde, hasta)}.pdf`,
+        titulo: `${negocio?.name || 'Cartoon Pizza'} · Reporte de ventas`,
+        subtitulo: `${desde.toLocaleDateString('es-CO')} – ${hasta.toLocaleDateString('es-CO')}`,
+        secciones: [{ columnas: columnasReporteVentas(), filas: filasReporteVentas(reporteVentasActual, (fecha) => fecha.split('-').reverse().join('/')) }]
+    });
 }
 
 // Corte de caja con las cifras del día que calcula el servidor

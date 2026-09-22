@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 async function inicializarModuloMesas() {
     usuarioActual = await cargarDatosUsuario(['mesero']);
+    configurarNavegacionAdmin(usuarioActual);
     document.getElementById('nombreUsuario').textContent = usuarioActual.name;
     
     await cargarMesas();

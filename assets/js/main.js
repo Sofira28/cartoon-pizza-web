@@ -142,3 +142,34 @@ function configurarNavegacion() {
 function cargarDatosUsuario(rolesPermitidos) {
     return Auth.requireSession(rolesPermitidos);
 }
+
+// Pantalla de cada rol (coincide con Auth.HOME_BY_ROLE en api.js)
+const PANTALLAS_POR_ROL = [
+    { pagina: 'admin.html', etiqueta: 'Panel Admin', icono: 'speedometer2' },
+    { pagina: 'mesas.html', etiqueta: 'Mesas y pedidos', icono: 'cup-hot' },
+    { pagina: 'cocina.html', etiqueta: 'Cocina', icono: 'fire' },
+    { pagina: 'caja.html', etiqueta: 'Caja', icono: 'cash-coin' }
+];
+
+// El admin puede entrar a la pantalla de cualquier rol (la API se lo permite; a los demás roles
+// Auth.requireSession los redirige si lo intentan). Esto arma el menú "Ir a" para que, una vez adentro,
+// pueda volver al panel de admin o pasar a otra pantalla sin depender del botón "atrás" del navegador.
+// Se llama después de cargarDatosUsuario(); en una página sin el contenedor #menuIrA, no hace nada.
+function configurarNavegacionAdmin(usuario) {
+    const contenedor = document.getElementById('menuIrA');
+    if (!contenedor || usuario.role !== 'admin') return;
+
+    const paginaActual = location.pathname.split('/').pop();
+    const opciones = PANTALLAS_POR_ROL.filter(item => item.pagina !== paginaActual);
+
+    contenedor.innerHTML = `
+        <div class="dropdown me-2">
+            <button class="btn btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-grid me-1"></i><span class="btn-text">Ir a</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                ${opciones.map(item => `<li><a class="dropdown-item" href="${item.pagina}"><i class="bi bi-${item.icono} me-2"></i>${item.etiqueta}</a></li>`).join('')}
+            </ul>
+        </div>
+    `;
+}

@@ -18,6 +18,14 @@ let archivoImagen = null;     // imagen elegida que todavía no se ha subido
 let imagenSubida = null;      // URL de la imagen ya subida (se reutiliza si hay que reintentar el guardado)
 let mesaEditando = null;
 
+let statsRango = null;        // { desde, hasta } del último reporte de estadísticas generado
+let topProductos = [];
+let categorias = [];
+let meseros = [];
+let mesasActivas = [];
+let comparacionPeriodos = [];
+let negocioActual = null;   // datos del negocio (config de la API), para el encabezado de los PDF
+
 const ZONA_HORARIA = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const DIAS_PANEL = 7;
 
@@ -53,13 +61,15 @@ document.addEventListener('DOMContentLoaded', function() {
 async function inicializarModuloAdmin() {
     usuarioActual = await cargarDatosUsuario(['admin']);
     document.getElementById('nombreUsuario').textContent = usuarioActual.name;
+    configurarNavegacionAdmin(usuarioActual);
 
     configurarNavegacion();
     prepararFormularios();
     configurarFiltros();
     configurarListenersSocket();
+    prepararFechasEstadisticas();
 
-    await Promise.all([cargarPanel(), cargarUsuarios(), cargarProductos(), cargarMesas()]);
+    await Promise.all([cargarNegocio(), cargarPanel(), cargarUsuarios(), cargarProductos(), cargarMesas(), cargarComparacionPeriodos(), generarEstadisticas()]);
 }
 
 // ===== Utilidades =====
@@ -119,6 +129,15 @@ function rangoUltimosDias(dias) {
 // "YYYY-MM-DD" en hora local (mismo formato con el que la API agrupa las ventas por día)
 function claveDia(fecha) {
     return fecha.toLocaleDateString('en-CA');
+}
+
+async function cargarNegocio() {
+    try {
+        negocioActual = (await Api.get('/config')).business;
+    } catch (error) {
+        console.error('Error cargando datos del negocio:', error);
+        negocioActual = { name: 'Cartoon Pizza' };
+    }
 }
 
 // ===== Panel principal =====
@@ -669,4 +688,241 @@ function configurarListenersSocket() {
     socket.on('orderStatusUpdate', programarRefresco);
     socket.on('newOrder', programarRefresco);
     socket.on('tableStatusUpdate', programarRefresco);
+}
+
+// ===== Estadísticas =====
+
+// Empieza con los últimos 7 días (mismo rango por defecto que el panel principal)
+function prepararFechasEstadisticas() {
+    document.getElementById('statsFechaInicio').value = rangoUltimosDias(DIAS_PANEL).from.slice(0, 10);
+    document.getElementById('statsFechaFin').value = new Date().toLocaleDateString('en-CA');
+}
+
+function fijarRangoEstadisticas(dias) {
+    const { from } = rangoUltimosDias(dias);
+    document.getElementById('statsFechaInicio').value = from.slice(0, 10);
+    document.getElementById('statsFechaFin').value = new Date().toLocaleDateString('en-CA');
+    generarEstadisticas();
+}
+
+async function generarEstadisticas() {
+    const fechaInicio = document.getElementById('statsFechaInicio').value;
+    const fechaFin = document.getElementById('statsFechaFin').value;
+    if (!fechaInicio || !fechaFin) return mostrarAviso('Selecciona ambas fechas');
+
+    const desde = new Date(`${fechaInicio}T00:00:00`);
+    const hasta = new Date(`${fechaFin}T23:59:59.999`);
+    if (desde > hasta) return mostrarAviso('La fecha inicial no puede ser posterior a la final');
+
+    document.getElementById('botonesExportarEstadisticas').classList.add('d-none');
+    const consulta = `from=${encodeURIComponent(desde.toISOString())}&to=${encodeURIComponent(hasta.toISOString())}`;
+
+    const resultado = await conAvisoDeError(
+        Promise.all([
+            Api.get(`/reports/top-products?${consulta}&limit=10`),
+            Api.get(`/reports/by-category?${consulta}`),
+            Api.get(`/reports/by-waiter?${consulta}`),
+            Api.get(`/reports/by-table?${consulta}`)
+        ]),
+        'No se pudieron cargar las estadísticas'
+    );
+    if (!resultado) return;
+
+    [topProductos, categorias, meseros, mesasActivas] = resultado;
+    statsRango = { desde, hasta };
+
+    renderizarTopProductos();
+    renderizarCategorias();
+    renderizarMeseros();
+    renderizarMesasActivas();
+    document.getElementById('botonesExportarEstadisticas').classList.remove('d-none');
+}
+
+function renderizarTopProductos() {
+    document.getElementById('tablaTopProductos').innerHTML = topProductos.length === 0
+        ? '<tr><td colspan="4" class="text-center text-muted py-4">Sin ventas en el rango</td></tr>'
+        : topProductos.map((producto, indice) => `
+            <tr>
+                <td>${indice + 1}</td>
+                <td>${escaparHtml(producto.name)}</td>
+                <td>${producto.quantity}</td>
+                <td>${formatearPesos(producto.revenue)}</td>
+            </tr>
+        `).join('');
+}
+
+function renderizarCategorias() {
+    if (categorias.length === 0) {
+        document.getElementById('tablaCategorias').innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Sin ventas en el rango</td></tr>';
+        return;
+    }
+    const maximo = Math.max(...categorias.map(categoria => categoria.revenue), 1);
+    document.getElementById('tablaCategorias').innerHTML = categorias.map(categoria => `
+        <tr>
+            <td>${escaparHtml(categoria.category)}</td>
+            <td>${categoria.quantity}</td>
+            <td>${formatearPesos(categoria.revenue)}</td>
+            <td class="admin-col-barra"><div class="barra-ventas" style="width: ${Math.round((categoria.revenue / maximo) * 100)}%"></div></td>
+        </tr>
+    `).join('');
+}
+
+function renderizarMeseros() {
+    document.getElementById('tablaMeseros').innerHTML = meseros.length === 0
+        ? '<tr><td colspan="4" class="text-center text-muted py-4">Sin ventas en el rango</td></tr>'
+        : meseros.map(mesero => `
+            <tr>
+                <td>${escaparHtml(mesero.waiterName)}</td>
+                <td>${mesero.orders}</td>
+                <td>${formatearPesos(mesero.revenue)}</td>
+                <td>${formatearPesos(mesero.averageTicket)}</td>
+            </tr>
+        `).join('');
+}
+
+function renderizarMesasActivas() {
+    document.getElementById('tablaMesasActivas').innerHTML = mesasActivas.length === 0
+        ? '<tr><td colspan="3" class="text-center text-muted py-4">Sin ventas en el rango</td></tr>'
+        : mesasActivas.map(mesa => `
+            <tr>
+                <td>Mesa ${mesa.tableNumber}</td>
+                <td>${mesa.orders}</td>
+                <td>${formatearPesos(mesa.revenue)}</td>
+            </tr>
+        `).join('');
+}
+
+// --- Comparación de periodos: siempre relativa a "ahora", no depende del selector de fechas de arriba ---
+
+function rangoDiaEspecifico(diasAtras) {
+    const inicio = new Date();
+    inicio.setDate(inicio.getDate() - diasAtras);
+    inicio.setHours(0, 0, 0, 0);
+    const fin = new Date(inicio);
+    fin.setHours(23, 59, 59, 999);
+    return { from: inicio.toISOString(), to: fin.toISOString() };
+}
+
+// Del lunes de esta semana hasta ahora
+function rangoEstaSemana() {
+    const ahora = new Date();
+    const diasDesdeElLunes = (ahora.getDay() + 6) % 7; // getDay(): 0 = domingo
+    const inicio = new Date(ahora);
+    inicio.setDate(ahora.getDate() - diasDesdeElLunes);
+    inicio.setHours(0, 0, 0, 0);
+    return { from: inicio.toISOString(), to: ahora.toISOString() };
+}
+
+// Los mismos días de la semana pasada, para comparar periodos del mismo tamaño
+function rangoSemanaAnterior() {
+    const actual = rangoEstaSemana();
+    const inicio = new Date(actual.from);
+    inicio.setDate(inicio.getDate() - 7);
+    const fin = new Date(actual.to);
+    fin.setDate(fin.getDate() - 7);
+    return { from: inicio.toISOString(), to: fin.toISOString() };
+}
+
+// Del día 1 de este mes hasta ahora
+function rangoEsteMes() {
+    const ahora = new Date();
+    const inicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0, 0, 0, 0);
+    return { from: inicio.toISOString(), to: ahora.toISOString() };
+}
+
+// El mismo número de días del mes pasado, para comparar periodos del mismo tamaño
+function rangoMesAnterior() {
+    const ahora = new Date();
+    const inicio = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1, 0, 0, 0, 0);
+    const fin = new Date(ahora.getFullYear(), ahora.getMonth() - 1, ahora.getDate(), 23, 59, 59, 999);
+    return { from: inicio.toISOString(), to: fin.toISOString() };
+}
+
+async function cargarComparacionPeriodos() {
+    const periodos = [
+        { etiqueta: 'Hoy vs. ayer', actual: rangoDiaEspecifico(0), anterior: rangoDiaEspecifico(1) },
+        { etiqueta: 'Esta semana vs. la anterior', actual: rangoEstaSemana(), anterior: rangoSemanaAnterior() },
+        { etiqueta: 'Este mes vs. el anterior', actual: rangoEsteMes(), anterior: rangoMesAnterior() }
+    ];
+    const consulta = ({ from, to }) => `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+
+    const resultado = await conAvisoDeError(
+        Promise.all(periodos.map(periodo => Promise.all([
+            Api.get(`/reports/summary?${consulta(periodo.actual)}`),
+            Api.get(`/reports/summary?${consulta(periodo.anterior)}`)
+        ]))),
+        'No se pudo cargar la comparación de periodos'
+    );
+    if (!resultado) return;
+
+    comparacionPeriodos = periodos.map((periodo, indice) => ({ etiqueta: periodo.etiqueta, actual: resultado[indice][0], anterior: resultado[indice][1] }));
+    renderizarComparacionPeriodos();
+}
+
+function renderizarComparacionPeriodos() {
+    document.getElementById('comparacionPeriodos').innerHTML = comparacionPeriodos.map(periodo => {
+        const actual = periodo.actual.sales;
+        const anterior = periodo.anterior.sales;
+        // Sin ventas en el periodo anterior no hay porcentaje real: si ahora sí hay ventas, se muestra como 100% de aumento
+        const cambio = anterior > 0 ? Math.round(((actual - anterior) / anterior) * 100) : (actual > 0 ? 100 : 0);
+        const subio = cambio >= 0;
+        return `
+            <div class="col-md-4 mb-3">
+                <div class="dashboard-card stat-comparacion">
+                    <div class="card-body">
+                        <div class="stat-label">${periodo.etiqueta}</div>
+                        <div class="stat-value">${formatearPesos(actual)}</div>
+                        <div class="stat-cambio ${subio ? 'cambio-positivo' : 'cambio-negativo'}">
+                            <i class="bi bi-arrow-${subio ? 'up' : 'down'}-short"></i>${Math.abs(cambio)}% vs. ${formatearPesos(anterior)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// --- Exportar a Excel y PDF ---
+
+function exportarEstadisticasExcel() {
+    if (!statsRango) return;
+    descargarExcel(`${nombreArchivoConFecha('estadisticas', statsRango.desde, statsRango.hasta)}.xlsx`, [
+        { nombre: 'Productos más vendidos', filas: topProductos, columnas: [
+            { clave: 'name', titulo: 'Producto' }, { clave: 'quantity', titulo: 'Cantidad' }, { clave: 'revenue', titulo: 'Ingresos (COP)' }
+        ] },
+        { nombre: 'Ventas por categoría', filas: categorias, columnas: [
+            { clave: 'category', titulo: 'Categoría' }, { clave: 'quantity', titulo: 'Cantidad' }, { clave: 'revenue', titulo: 'Ingresos (COP)' }
+        ] },
+        { nombre: 'Desempeño por mesero', filas: meseros, columnas: [
+            { clave: 'waiterName', titulo: 'Mesero' }, { clave: 'orders', titulo: 'Pedidos' },
+            { clave: 'revenue', titulo: 'Ventas (COP)' }, { clave: 'averageTicket', titulo: 'Ticket promedio (COP)' }
+        ] },
+        { nombre: 'Mesas más activas', filas: mesasActivas, columnas: [
+            { clave: 'tableNumber', titulo: 'Mesa' }, { clave: 'orders', titulo: 'Pedidos' }, { clave: 'revenue', titulo: 'Ventas (COP)' }
+        ] }
+    ]);
+}
+
+function exportarEstadisticasPDF() {
+    if (!statsRango) return;
+    descargarPDF({
+        archivo: `${nombreArchivoConFecha('estadisticas', statsRango.desde, statsRango.hasta)}.pdf`,
+        titulo: `${negocioActual?.name || 'Cartoon Pizza'} · Estadísticas del negocio`,
+        subtitulo: `${statsRango.desde.toLocaleDateString('es-CO')} – ${statsRango.hasta.toLocaleDateString('es-CO')}`,
+        secciones: [
+            { titulo: 'Productos más vendidos', filas: topProductos, columnas: [
+                { clave: 'name', titulo: 'Producto' }, { clave: 'quantity', titulo: 'Cant.' }, { clave: 'revenue', titulo: 'Ingresos', moneda: true }
+            ] },
+            { titulo: 'Ventas por categoría', filas: categorias, columnas: [
+                { clave: 'category', titulo: 'Categoría' }, { clave: 'quantity', titulo: 'Cant.' }, { clave: 'revenue', titulo: 'Ingresos', moneda: true }
+            ] },
+            { titulo: 'Desempeño por mesero', filas: meseros, columnas: [
+                { clave: 'waiterName', titulo: 'Mesero' }, { clave: 'orders', titulo: 'Pedidos' },
+                { clave: 'revenue', titulo: 'Ventas', moneda: true }, { clave: 'averageTicket', titulo: 'Ticket prom.', moneda: true }
+            ] },
+            { titulo: 'Mesas más activas', filas: mesasActivas, columnas: [
+                { clave: 'tableNumber', titulo: 'Mesa' }, { clave: 'orders', titulo: 'Pedidos' }, { clave: 'revenue', titulo: 'Ventas', moneda: true }
+            ] }
+        ]
+    });
 }
